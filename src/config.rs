@@ -6,9 +6,8 @@ use serde::Deserialize;
 pub struct Server {
 	pub address: String,
 	pub port: i32,
-	pub cache: bool,
 	pub plugins: Option<String>,
-	pub route: Vec<WebRoute>,
+	pub route: Option<Vec<WebRoute>>,
 	pub headers: Option<Vec<RouteHeader>>,
 	pub https: Option<bool>
 }

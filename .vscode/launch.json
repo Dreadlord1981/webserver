@@ -16,7 +16,7 @@
 			},
 			"args": [
 				"-r",
-				"examples/plugins/server"
+				"./examples/headers"
 			]
 		},
 		{

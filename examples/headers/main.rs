@@ -7,7 +7,7 @@ use clap::Parser;
 async fn main() -> Result<(), anyhow::Error> {
 
 	let mut args = Args::parse();
-	args.root = Some("./examples/plugins".into());
+	args.root = Some("./examples/headers".into());
 
 	let (app, listener) = init(&args).await?;
 

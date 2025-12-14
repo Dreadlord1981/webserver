@@ -1,0 +1,8 @@
+[server]
+address=""
+port=7701
+https= true
+
+[[server.headers]]
+key="cache-control"
+value="public, max-age=3600"

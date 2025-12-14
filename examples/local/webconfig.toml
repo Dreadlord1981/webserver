@@ -1,0 +1,8 @@
+[server]
+address="www.google.com"
+port=7701
+cache=false
+
+[[server.route]]
+path="/public"
+ifs="./www"

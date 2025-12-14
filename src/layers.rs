@@ -5,33 +5,26 @@ use axum_proxy::PathRewriter;
 use tower::{Layer, Service};
 
 #[derive(Clone)]
-pub struct RewriteLayer<T> 
-where T: Clone{
-    pub state: T,
-}
+pub struct RewriteLayer;
 
-impl<S, T> Layer<S> for RewriteLayer<T>
-where T: Clone {
-    type Service = RewriteService<S, T>;
+impl<S> Layer<S> for RewriteLayer{
+    type Service = RewriteService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
         RewriteService {
-            inner,
-            state: self.state.clone(),
+            inner
         }
     }
 }
 
 #[derive(Clone)]
-pub struct RewriteService<S, T> {
-    inner: S,
-    state: T,
+pub struct RewriteService<S> {
+    inner: S
 }
 
-impl<S, B, T> Service<Request<B>> for RewriteService<S, T>
+impl<S, B> Service<Request<B>> for RewriteService<S>
 where
-     S: Service<Request<B>>,
-	 T: Clone + Send + Sync + 'static
+     S: Service<Request<B>>
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -52,9 +45,6 @@ where
 
 			*req.uri_mut() = new_uri;
 		}
-
-        // Inject real state
-        req.extensions_mut().insert(self.state.clone());
 
         self.inner.call(req)
     }

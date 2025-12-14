@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use anyhow::anyhow;
 use axum::{Json, body::Body, extract::Request, response::IntoResponse};
@@ -74,7 +74,9 @@ pub async fn plugins_get(
 
 			if plugin_path.exists() {
 
-				let lib_result = libloading::Library::new(PathBuf::from(format!("plugins/{plugin}.dll")));
+				let lib_path = plugin_path.join(format!("{plugin}.dll"));
+
+				let lib_result = libloading::Library::new(lib_path);
 
 				if let Ok(lib) = lib_result {
 
