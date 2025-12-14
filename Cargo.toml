@@ -10,7 +10,7 @@ name="iceserver"
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.7", features = ["ws"] }
-axum-proxy = { version = "0.6.0", features = ["axum"] }
+axum-proxy = { version = "0.6.0", features = ["axum", "https"] }
 clap = { version = "4.5.53", features = ["derive"] }
 expand-env-vars = "0.1.0"
 libloading = "0.9.0"

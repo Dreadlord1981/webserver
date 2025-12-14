@@ -1,7 +1,7 @@
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
-use webserver::{api::init, cli::Args, config::{RewriteWithState, WebConfig}, db::User};
+use webserver::{api::init, cli::Args, config::WebConfig, db::User, layers::RewriteLayer};
 use clap::Parser;
 use expand_env_vars::expand_env_vars;
 use tokio::{fs::OpenOptions, io::AsyncReadExt};
@@ -17,7 +17,7 @@ async fn main() -> Result<(), anyhow::Error> {
 			expand_env_vars(path)?
 		}
 		else {
-			shellexpand::env(&path)?.into()
+			shellexpand::full(&path)?.into()
 		}
 	}
 	else {
@@ -59,9 +59,9 @@ async fn main() -> Result<(), anyhow::Error> {
 			username: "PNO".into()
 		};
 
-		let svc = RewriteWithState { inner: app.into_service(), state: Arc::new(user) };
+		let app = app.layer(RewriteLayer {state: user.clone()});
 
-		axum::serve(listener, tower::make::Shared::new(svc)).await?;
+		axum::serve(listener, tower::make::Shared::new(app)).await?;
 	}
 	else {
 		return Err(anyhow!("webconfig.toml not found mut be place in root of server"));

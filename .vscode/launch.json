@@ -5,7 +5,22 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug executable 'axum_server'",
+			"name": "Debug local",
+			"type": "lldb",
+			"request": "launch",
+			"cargo": {
+				"args": [
+					"run",
+					"--bin=iceserver"
+				]
+			},
+			"args": [
+				"-r",
+				"examples/plugins/server"
+			]
+		},
+		{
+			"name": "Debug 206",
 			"type": "lldb",
 			"request": "launch",
 			"cargo": {
