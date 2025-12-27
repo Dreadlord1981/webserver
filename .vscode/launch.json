@@ -5,6 +5,18 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Debug test",
+			"type": "lldb",
+			"request": "launch",
+			"program": "${workspaceFolder}/target/debug/iceserver.exe",
+			"args": [
+				"-r",
+				"./examples/headers"
+			],
+			"cwd": "${workspaceFolder}",
+			"preLaunchTask": "cargo build"
+		},
+		{
 			"name": "Debug local",
 			"type": "lldb",
 			"request": "launch",

@@ -1,6 +1,6 @@
 [server]
 address=""
-port=7701
+port=7777
 https= true
 
 [[server.headers]]
