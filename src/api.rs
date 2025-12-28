@@ -9,7 +9,7 @@ use axum::extract::{Request, State};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::Router;
 use axum::routing::{get, post};
-use axum_proxy::AppendPrefix;
+use axum_proxy::{AppendPrefix, TrimPrefix};
 use expand_env_vars::expand_env_vars;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncReadExt;
@@ -153,11 +153,11 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
 
 	if !server.address.is_empty() {
 		app = if let Some(val) = server.https && val {
-			let proxy = axum_proxy::builder_https(server.address.clone())?.build(AppendPrefix(""));
+			let proxy = axum_proxy::builder_https(server.address.clone())?.build(TrimPrefix("out"));
 			app.route_service("/out/{*path}", proxy)
 		}
 		else {
-			let proxy = axum_proxy::builder_http(server.address.clone())?.build(AppendPrefix(""));
+			let proxy = axum_proxy::builder_http(server.address.clone())?.build(TrimPrefix(""));
 			app.route_service("/out/{*path}", proxy)
 		};
 	}
