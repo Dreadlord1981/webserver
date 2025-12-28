@@ -8,7 +8,7 @@ pub struct Server {
 	pub port: i32,
 	pub plugins: Option<String>,
 	pub route: Option<Vec<WebRoute>>,
-	pub headers: Option<Vec<RouteHeader>>,
+	pub headers: Option<Vec<ServerHeader>>,
 	pub https: Option<bool>
 }
 
@@ -27,7 +27,7 @@ pub struct WebRoute {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct RouteHeader {
+pub struct ServerHeader {
 	pub key: String,
 	pub value: String
 }

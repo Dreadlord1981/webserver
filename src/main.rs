@@ -1,5 +1,3 @@
-
-
 use webserver::{api::init, cli::Args};
 use clap::Parser;
 

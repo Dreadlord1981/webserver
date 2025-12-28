@@ -5,19 +5,19 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug test",
-			"type": "lldb",
+			"name": "Debug ccpdbg",
+			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}/target/debug/iceserver.exe",
 			"args": [
 				"-r",
-				"./examples/headers"
+				"~/projects/test/server"
 			],
+			"program": "${workspaceRoot}/target/debug/iceserver.exe",
 			"cwd": "${workspaceFolder}",
 			"preLaunchTask": "cargo build"
 		},
 		{
-			"name": "Debug local",
+			"name": "Debug lldb",
 			"type": "lldb",
 			"request": "launch",
 			"cargo": {
@@ -28,34 +28,8 @@
 			},
 			"args": [
 				"-r",
-				"./examples/headers"
+				"~/projects/test/server/server.toml"
 			]
-		},
-		{
-			"name": "Debug 206",
-			"type": "lldb",
-			"request": "launch",
-			"cargo": {
-				"args": [
-					"run",
-					"--bin=iceserver"
-				]
-			},
-			"args": [
-				"-r",
-				"$POPATH/../projects/portfolio_6"
-			]
-		},
-		{
-			"name": "Debug unit tests in executable 'iceserver'",
-			"type": "lldb",
-			"request": "launch",
-			"cargo": {
-				"args": [
-					"test",
-					"--bin=iceserver"
-				]
-			}
 		}
 	]
 }

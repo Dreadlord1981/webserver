@@ -14,7 +14,6 @@ use expand_env_vars::expand_env_vars;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
-use tower_http::services::ServeFile;
 use tower_http::{compression::CompressionLayer, services::ServeDir};
 use tracing::info;
 
@@ -39,22 +38,31 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
 		".".into()
 	};
 
-
 	let root_path = PathBuf::from(&root);
 
 	let resolved = root_path.canonicalize().unwrap();
 
-	let root_path = PathBuf::from(&resolved);
+	let mut root_path = PathBuf::from(&resolved);
 
 	let mut file = if root_path.exists() {
 
-		let file_path = root_path.join("webconfig.toml");
+		let file_path = if root_path.is_file() {
+
+			let path = root_path.clone();
+
+			root_path = root_path.parent().unwrap().to_path_buf();
+
+			path
+		}
+		else {
+			root_path.join("webconfig.toml")
+		};
 
 		if file_path.exists() {
 			let _ = std::env::set_current_dir(&root);
 		}
 		else {
-			return Err(anyhow!("webconfig.toml not found mut be place in root of server"));
+			return Err(anyhow!("Toml not found mut be place in root of server"));
 		}
 
 		OpenOptions::new().read(true).open(file_path).await.unwrap()
@@ -159,10 +167,11 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
 	app = app.route("/plugins/{*path}", post(plugins_post));
 
 	if !root_used {
-		let root_folder = ServeDir::new(root_path).precompressed_gzip().precompressed_br();
-	
-		app = app.route_service("/" ,root_folder)
-		.fallback_service(ServeFile::new("index.html").precompressed_br().precompressed_gzip());
+		let root_folder = ServeDir::new(root_path)
+			.precompressed_gzip()
+			.precompressed_br();
+
+		app = app.fallback_service(root_folder);
 	}
 
 	app = app.layer(from_fn(log_request));
