@@ -153,11 +153,11 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
 
 	if !server.address.is_empty() {
 		app = if let Some(val) = server.https && val {
-			let proxy = axum_proxy::builder_https(server.address.clone())?.build(TrimPrefix("out"));
+			let proxy = axum_proxy::builder_https(server.address.clone())?.build(TrimPrefix("/out"));
 			app.route_service("/out/{*path}", proxy)
 		}
 		else {
-			let proxy = axum_proxy::builder_http(server.address.clone())?.build(TrimPrefix(""));
+			let proxy = axum_proxy::builder_http(server.address.clone())?.build(TrimPrefix("/out"));
 			app.route_service("/out/{*path}", proxy)
 		};
 	}

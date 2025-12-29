@@ -19,7 +19,7 @@ impl<S> Layer<S> for RewriteLayer{
 
 #[derive(Clone)]
 pub struct RewriteService<S> {
-    inner: S
+    pub inner: S
 }
 
 impl<S, B> Service<Request<B>> for RewriteService<S>

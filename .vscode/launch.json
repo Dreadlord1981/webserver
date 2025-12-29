@@ -28,7 +28,7 @@
 			},
 			"args": [
 				"-r",
-				"~/projects/test/server/server.toml"
+				"~/projects/test/server/webconfig.toml"
 			]
 		}
 	]
