@@ -17,7 +17,7 @@
 			"preLaunchTask": "cargo build"
 		},
 		{
-			"name": "Debug lldb",
+			"name": "Debug Portfolio",
 			"type": "lldb",
 			"request": "launch",
 			"cargo": {
@@ -28,7 +28,39 @@
 			},
 			"args": [
 				"-r",
-				"~/projects/test/server/webconfig.toml"
+				"~/work/git/projects/portfolio_6"
+			]
+		},
+		{
+			"name": "Debug local examples",
+			"type": "lldb",
+			"request": "launch",
+			"cargo": {
+				"args": [
+					"run",
+					"--bin=iceserver"
+				]
+			},
+			"args": [
+				"-r",
+				"examples/local/www",
+				"-v"
+			]
+		},
+		{
+			"name": "Debug tjl",
+			"type": "lldb",
+			"request": "launch",
+			"cargo": {
+				"args": [
+					"run",
+					"--bin=iceserver"
+				]
+			},
+			"args": [
+				"-r",
+				"~/work/git/projects/tjl/webconfig.toml",
+				"-v"
 			]
 		}
 	]

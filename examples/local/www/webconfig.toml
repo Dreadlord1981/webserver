@@ -1,4 +1,8 @@
 [server]
 address=""
-port=7701
+port=7711
 cache=false
+
+[[server.route]]
+path="/apps"
+ifs="./apps"

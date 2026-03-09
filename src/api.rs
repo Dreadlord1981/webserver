@@ -1,13 +1,12 @@
-
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::anyhow;
-use axum::http::{HeaderName, HeaderValue};
-use axum::response::Response;
-use axum::extract::{Request, State};
-use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::Router;
+use axum::extract::{Request, State};
+use axum::http::{HeaderName, HeaderValue};
+use axum::middleware::{Next, from_fn, from_fn_with_state};
+use axum::response::Response;
 use axum::routing::{get, post};
 use axum_proxy::{AppendPrefix, TrimPrefix};
 use expand_env_vars::expand_env_vars;
@@ -19,173 +18,234 @@ use tracing::info;
 
 use crate::cli::Args;
 use crate::layers::{RewriteLayer, TrimToWildcard};
-use crate::{config::WebConfig, plugins::{plugins_get, plugins_post}};
+use crate::{
+    config::WebConfig,
+    plugins::{plugins_get, plugins_post},
+};
+
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use notify::{RecursiveMode, Watcher, event::ModifyKind};
+use tokio::sync::broadcast;
 
 pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
+    let root = if let Some(path) = &args.root {
+        if path.starts_with("%") {
+            expand_env_vars(path)?
+        } else if path.starts_with("~") {
+            shellexpand::full(&path)?.into()
+        } else {
+            shellexpand::env(&path)?.into()
+        }
+    } else {
+        ".".into()
+    };
 
-	let root = if let Some(path) = &args.root {
-		if path.starts_with("%") {
-			expand_env_vars(path)?
-		}
-		else if path.starts_with("~") {
-			shellexpand::full(&path)?.into()
-		}
-		else {
-			shellexpand::env(&path)?.into()
-		}
-	}
-	else {
-		".".into()
-	};
+    let root_path = PathBuf::from(&root);
 
-	let root_path = PathBuf::from(&root);
+    let resolved = root_path.canonicalize().unwrap();
 
-	let resolved = root_path.canonicalize().unwrap();
+    let mut root_path = PathBuf::from(&resolved);
 
-	let mut root_path = PathBuf::from(&resolved);
+    let mut file = if root_path.exists() {
+        let file_path = if root_path.is_file() {
+            let path = root_path.clone();
 
-	let mut file = if root_path.exists() {
+            root_path = root_path.parent().unwrap().to_path_buf();
 
-		let file_path = if root_path.is_file() {
+            path
+        } else {
+            root_path.join("webconfig.toml")
+        };
 
-			let path = root_path.clone();
+        if file_path.exists() {
+            let _ = std::env::set_current_dir(&root_path);
+        } else {
+            return Err(anyhow!("Toml not found mut be place in root of server"));
+        }
 
-			root_path = root_path.parent().unwrap().to_path_buf();
+        OpenOptions::new().read(true).open(file_path).await.unwrap()
+    } else {
+        return Err(anyhow!("Invalid path"));
+    };
 
-			path
-		}
-		else {
-			root_path.join("webconfig.toml")
-		};
+    let mut buffer = String::from("");
 
-		if file_path.exists() {
-			let _ = std::env::set_current_dir(&root);
-		}
-		else {
-			return Err(anyhow!("Toml not found mut be place in root of server"));
-		}
+    file.read_to_string(&mut buffer).await?;
 
-		OpenOptions::new().read(true).open(file_path).await.unwrap()
-	}
-	else {
-		return Err(anyhow!("Invalid path"));
-	};
+    let config: WebConfig = toml::from_str(&buffer)?;
 
-	let mut buffer = String::from("");
+    let config = config.clone();
 
-	file.read_to_string(&mut buffer).await?;
+    tracing_subscriber::fmt::init();
 
-	let config: WebConfig = toml::from_str(&buffer)?;
+    let (tx, _rx) = broadcast::channel::<String>(100);
 
-	let config = config.clone();
+    let mut app = Router::new();
 
-	tracing_subscriber::fmt::init();
-	
-	let mut app = Router::new();
+    app = app.layer(CompressionLayer::new().gzip(true));
 
-	app = app.layer(CompressionLayer::new().gzip(true));
+    let server = config.server.clone();
 
-	let server = config.server.clone();
+    let mut root_used = false;
 
-	let mut root_used = false;
-	
-	if let Some(routes) = server.route {
+    if args.verbose {
+        info!("Server Root: {:?}", &root_path);
+    }
 
-		for route in routes.iter() {
+    if let Some(routes) = server.route {
+        for route in routes.iter() {
+            if route.ifs.is_some() {
+                let ifs = route.ifs.clone().unwrap();
 
-			if route.ifs.is_some() {
+                let path: String = if ifs.starts_with("%") {
+                    expand_env_vars(&ifs)?
+                } else {
+                    shellexpand::full(&ifs)?.into()
+                };
 
-				let ifs = route.ifs.as_ref().unwrap();
-				
-				let path: String = if ifs.starts_with("%") {
-					expand_env_vars(ifs)?
-				}
-				else {
-					shellexpand::env(ifs)?.into()
-				};
+                let dir = ServeDir::new(&path);
+                app = app.nest_service(&route.path, dir);
 
-				let dir = ServeDir::new(path);
-				app = app.nest_service(&route.path, dir);
-			}
-			else {
+                if args.verbose {
+                    info!("Route: {}", &route.path);
+                    info!("IFS path: {}", &path);
+                }
 
-				let route_address = if let Some(route_address) = &route.address {
-					route_address.to_string()
-				}
-				else {
-					server.address.clone()
-				};
+                if let Some(true) = route.watch {
+                    let tx = tx.clone();
+                    let watch_path = path.clone();
 
-				if route.path == "/" {
-					root_used = true;
-				}
+                    tokio::spawn(async move {
+                        let (watch_tx, mut watch_rx) = tokio::sync::mpsc::channel(1);
 
-				let https = if let Some(val) = route.https {
-					val
-				}
-				else {
-					let mut result = false;
+                        let mut watcher = notify::recommended_watcher(move |res| {
+                            if let Ok(event) = res {
+                                let _ = watch_tx.blocking_send(event);
+                            }
+                        })
+                        .unwrap();
 
-					if let Some(server_val) = server.https {
-						result = server_val
-					}
+                        watcher
+                            .watch(std::path::Path::new(&watch_path), RecursiveMode::Recursive)
+                            .unwrap();
 
-					result
-				};
+                        loop {
+                            tokio::select! {
+                                Some(event) = watch_rx.recv() => {
+                                    match event.kind {
+                                        notify::EventKind::Modify(ModifyKind::Data(_))
+                                        | notify::EventKind::Modify(ModifyKind::Name(_))
+                                        | notify::EventKind::Create(_)
+                                        | notify::EventKind::Remove(_) => {
+                                            for path in event.paths {
+                                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                                    let _ = tx.send(content);
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                _ = shutdown_signal() => {
+                                    break;
+                                }
+                                else => break,
+                            }
+                        }
+                    });
 
-				app = if https {
-					let proxy = if let Some(val) = route.strip && val {
-						
-						axum_proxy::builder_https(route_address)?.build(TrimToWildcard(route.path.clone()))
-					}
-					else {
-						axum_proxy::builder_https(route_address)?.build(TrimToWildcard("".into()))
-					};
-					app.route_service(&route.path, proxy)
-				}
-				else {
-					let proxy = axum_proxy::builder_http(route_address)?.build(AppendPrefix(""));
-					app.route_service(&route.path, proxy)
-				};
-			}
-		}
-	}
+                    if args.verbose {
+                        info!("Watching for changes on: {}", &path);
+                    }
+                }
+            } else {
+                let route_address = if let Some(route_address) = &route.address {
+                    route_address.to_string()
+                } else {
+                    server.address.clone()
+                };
 
-	if !server.address.is_empty() {
-		app = if let Some(val) = server.https && val {
-			let proxy = axum_proxy::builder_https(server.address.clone())?.build(TrimPrefix("/out"));
-			app.route_service("/out/{*path}", proxy)
-		}
-		else {
-			let proxy = axum_proxy::builder_http(server.address.clone())?.build(TrimPrefix("/out"));
-			app.route_service("/out/{*path}", proxy)
-		};
-	}
+                if route.path == "/" {
+                    root_used = true;
+                }
 
-	app = app.route("/plugins/{*path}", get(plugins_get));
+                let https = if let Some(val) = route.https {
+                    val
+                } else {
+                    let mut result = false;
 
-	app = app.route("/plugins/{*path}", post(plugins_post));
+                    if let Some(server_val) = server.https {
+                        result = server_val
+                    }
 
-	if !root_used {
-		let root_folder = ServeDir::new(root_path)
-			.precompressed_gzip()
-			.precompressed_br();
+                    result
+                };
 
-		app = app.fallback_service(root_folder);
-	}
+                app = if https {
+                    let proxy = if let Some(val) = route.strip
+                        && val
+                    {
+                        axum_proxy::builder_https(route_address)?
+                            .build(TrimToWildcard(route.path.clone()))
+                    } else {
+                        axum_proxy::builder_https(route_address)?.build(TrimToWildcard("".into()))
+                    };
+                    app.route_service(&route.path, proxy)
+                } else {
+                    let proxy = axum_proxy::builder_http(route_address)?.build(AppendPrefix(""));
+                    app.route_service(&route.path, proxy)
+                };
+            }
+        }
+    }
 
-	app = app.layer(from_fn(log_request));
+    if !server.address.is_empty() {
+        app = if let Some(val) = server.https
+            && val
+        {
+            let proxy =
+                axum_proxy::builder_https(server.address.clone())?.build(TrimPrefix("/out"));
+            app.route_service("/out/{*path}", proxy)
+        } else {
+            let proxy = axum_proxy::builder_http(server.address.clone())?.build(TrimPrefix("/out"));
+            app.route_service("/out/{*path}", proxy)
+        };
+    }
 
-	app = app.route_layer(from_fn_with_state(config.clone(), set_headers));
+    app = app.route("/plugins/{*path}", get(plugins_get));
 
-	app = app.layer(RewriteLayer);
+    app = app.route("/plugins/{*path}", post(plugins_post));
 
-	let listener = tokio::net::TcpListener::bind(format!("localhost:{}", server.port)).await?;
+    app = app.route(
+        "/ws",
+        get({
+            let tx = tx.clone();
+            move |ws: WebSocketUpgrade| {
+                let rx = tx.subscribe();
+                async move { ws.on_upgrade(|socket| handle_hotreload_socket(socket, rx)) }
+            }
+        }),
+    );
 
-	println!("Serving at http://localhost:{}", server.port);
+    if !root_used {
+        let root_folder = ServeDir::new(root_path)
+            .precompressed_gzip()
+            .precompressed_br();
 
-	Ok((app, listener))
+        app = app.fallback_service(root_folder);
+    }
 
+    app = app.layer(from_fn(log_request));
+
+    app = app.route_layer(from_fn_with_state(config.clone(), set_headers));
+
+    app = app.layer(RewriteLayer);
+
+    let listener = tokio::net::TcpListener::bind(format!("localhost:{}", server.port)).await?;
+
+    println!("Serving at http://localhost:{}", server.port);
+
+    Ok((app, listener))
 }
 
 async fn log_request(req: Request, next: axum::middleware::Next) -> axum::response::Response {
@@ -196,23 +256,72 @@ async fn log_request(req: Request, next: axum::middleware::Next) -> axum::respon
     next.run(req).await
 }
 
-async fn set_headers(
-	State(state): State<WebConfig>,
-	request: Request,
-	next: Next
-) -> Response {
+async fn set_headers(State(state): State<WebConfig>, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let server = state.server;
 
-	let mut response = next.run(request).await;
-	let server = state.server;
+    let headers = response.headers_mut();
 
-	let headers = response.headers_mut();
+    if let Some(route_headers) = server.headers {
+        for h in route_headers {
+            headers.insert(
+                HeaderName::from_str(&h.key).unwrap(),
+                HeaderValue::from_str(&h.value).unwrap(),
+            );
+        }
+    }
 
-	if let Some(route_headers) = server.headers {
+    response
+}
 
-		for h in route_headers {
-			headers.insert(HeaderName::from_str(&h.key).unwrap(), HeaderValue::from_str(&h.value).unwrap());
-		}
-	}
+async fn handle_hotreload_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<String>) {
+    loop {
+        tokio::select! {
+            Ok(msg) = rx.recv() => {
+                if socket.send(Message::Text(msg.into())).await.is_err() {
+                    break;
+                }
+            }
+            msg = socket.recv() => {
+                if let Some(Ok(Message::Close(_))) | None = msg {
+                    break;
+                }
+            }
+            _ = shutdown_signal() => {
+                let _ = socket.send(Message::Close(None)).await;
+                break;
+            }
+        }
+    }
+}
 
-	response
+pub async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(windows)]
+    let terminate = async {
+        let mut ctrl_close =
+            tokio::signal::windows::ctrl_close().expect("failed to install CTRL_CLOSE handler");
+        ctrl_close.recv().await;
+    };
+
+    #[cfg(not(any(unix, windows)))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

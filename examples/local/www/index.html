@@ -11,5 +11,16 @@
 	<body>
 		This is the start page
 	</body>
+	
+	<script>
+		fetch("/apps/build.json")
+		.then(async function(i_response) {
+			let data = await i_response.json();
+			console.log("Data: ", data);
+		})
+		.catch(function(i_error) {
+			console.log("Could not fetch the build.json file. Error: ", i_error);
+		})
+	</script>
 
 </html>

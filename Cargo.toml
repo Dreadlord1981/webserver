@@ -24,6 +24,9 @@ tower-http = { version = "0.6.7", features = ["full"] }
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
 hyper = { version = "0.14", features = ["full"] }
+notify = { version = "8.2.0", features = ["macos_fsevent"] }
+tokio-stream = "0.1.18"
+axum-extra = { version = "0.12.5", features = ["typed-header"] }
 
 [profile.dev]
 debug = true
