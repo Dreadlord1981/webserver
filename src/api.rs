@@ -24,8 +24,11 @@ use crate::{
 };
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use notify::{RecursiveMode, Watcher, event::ModifyKind};
+use notify::{RecursiveMode, Watcher};
 use tokio::sync::broadcast;
+
+use std::collections::HashMap;
+use std::time::SystemTime;
 
 pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
     let root = if let Some(path) = &args.root {
@@ -129,20 +132,39 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
                             .watch(std::path::Path::new(&watch_path), RecursiveMode::Recursive)
                             .unwrap();
 
+						let mut last_sent: HashMap<std::path::PathBuf, SystemTime> = HashMap::new();
+
                         loop {
                             tokio::select! {
                                 Some(event) = watch_rx.recv() => {
                                     match event.kind {
-                                        notify::EventKind::Modify(ModifyKind::Data(_))
-                                        | notify::EventKind::Modify(ModifyKind::Name(_))
-                                        | notify::EventKind::Create(_)
-                                        | notify::EventKind::Remove(_) => {
-                                            for path in event.paths {
-                                                if let Ok(content) = std::fs::read_to_string(&path) {
-                                                    let _ = tx.send(content);
-                                                }
-                                            }
-                                        }
+                                        notify::EventKind::Remove(_) => {},
+										notify::EventKind::Modify(kind) => {
+											match kind {
+												notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Any => {
+													for path in event.paths {
+														if path.is_file() && let Ok(meta) = std::fs::metadata(&path) && let Ok(modified) = meta.modified() {
+
+															let should_send = match last_sent.get(&path) {
+																Some(prev) => *prev != modified,
+																None => true,
+															};
+
+															if should_send {
+																last_sent.insert(path.clone(), modified);
+
+																if let Ok(content) = std::fs::read_to_string(&path) {
+																	let _ = tx.send(content);
+																}
+															}
+															
+														}
+													}
+												},
+												_=> continue,
+											}
+											
+										}
                                         _ => {}
                                     }
                                 }
