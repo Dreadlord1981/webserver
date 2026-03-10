@@ -116,7 +116,12 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
 
                 if let Some(true) = route.watch {
                     let tx = tx.clone();
-                    let watch_path = path.clone();
+                    let watch_path = std::path::Path::new(&path).canonicalize().unwrap();
+                    let web_base = if route.path == "/" {
+                        "".to_string()
+                    } else {
+                        route.path.clone()
+                    };
 
                     tokio::spawn(async move {
                         let (watch_tx, mut watch_rx) = tokio::sync::mpsc::channel(1);
@@ -129,42 +134,54 @@ pub async fn init(args: &Args) -> Result<(Router, TcpListener), anyhow::Error> {
                         .unwrap();
 
                         watcher
-                            .watch(std::path::Path::new(&watch_path), RecursiveMode::Recursive)
+                            .watch(&watch_path, RecursiveMode::Recursive)
                             .unwrap();
 
-						let mut last_sent: HashMap<std::path::PathBuf, SystemTime> = HashMap::new();
+                        let mut last_sent: HashMap<std::path::PathBuf, SystemTime> = HashMap::new();
 
                         loop {
                             tokio::select! {
                                 Some(event) = watch_rx.recv() => {
                                     match event.kind {
                                         notify::EventKind::Remove(_) => {},
-										notify::EventKind::Modify(kind) => {
-											match kind {
-												notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Any => {
-													for path in event.paths {
-														if path.is_file() && let Ok(meta) = std::fs::metadata(&path) && let Ok(modified) = meta.modified() {
+                                        notify::EventKind::Modify(kind) => {
+                                            match kind {
+                                                notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Any => {
+                                                    for path in event.paths {
+                                                        if path.is_file() && let Ok(meta) = std::fs::metadata(&path) && let Ok(modified) = meta.modified() {
 
-															let should_send = match last_sent.get(&path) {
-																Some(prev) => *prev != modified,
-																None => true,
-															};
+                                                            let should_send = match last_sent.get(&path) {
+                                                                Some(prev) => *prev != modified,
+                                                                None => true,
+                                                            };
 
-															if should_send {
-																last_sent.insert(path.clone(), modified);
+                                                            if should_send {
+                                                                last_sent.insert(path.clone(), modified);
 
-																if let Ok(content) = std::fs::read_to_string(&path) {
-																	let _ = tx.send(content);
-																}
-															}
-															
-														}
-													}
-												},
-												_=> continue,
-											}
-											
-										}
+                                                                if let Ok(abs_path) = path.canonicalize()
+                                                                    && let Ok(rel_path) = abs_path.strip_prefix(&watch_path)
+                                                                {
+                                                                    let web_path = format!("{}/{}", web_base, rel_path.to_string_lossy().replace('\\', "/"));
+                                                                    let web_path = web_path.replace("//", "/");
+
+                                                                    if let Ok(content) = std::fs::read_to_string(&abs_path)
+                                                                    {
+                                                                        let payload = serde_json::json!({
+                                                                            "path": web_path,
+                                                                            "content": content
+                                                                        });
+                                                                        let _ = tx.send(payload.to_string());
+                                                                    }
+                                                                }
+                                                            }
+
+                                                        }
+                                                    }
+                                                },
+                                                _=> continue,
+                                            }
+
+                                        }
                                         _ => {}
                                     }
                                 }
