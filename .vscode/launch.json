@@ -10,7 +10,8 @@
 			"request": "launch",
 			"args": [
 				"-r",
-				"~/projects/test/server"
+				"~/work/git/projects/portfolio_6",
+				"-v"
 			],
 			"program": "${workspaceRoot}/target/debug/iceserver.exe",
 			"cwd": "${workspaceFolder}",

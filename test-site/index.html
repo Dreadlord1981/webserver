@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Hot Reload Test</title>
+    </head>
+    <body>
+        <h1>Original Content</h1>
+        <p>Trying out the hot reload!</p>
+
+        <script>
+            // Setup the hotreload websocket
+            const socket = new WebSocket(`ws://${location.host}/ws`);
+
+            socket.onmessage = (event) => {
+                if (event.data === "reload") {
+                    console.log("Reloading page due to file change...");
+                    window.location.reload();
+                }
+            };
+
+            socket.onopen = () => {
+                console.log("Connected to hot reload websocket server.");
+            };
+
+            socket.onclose = () => {
+                console.log("Disconnected from hot reload websocket server.");
+            };
+        </script>
+    </body>
+</html>
