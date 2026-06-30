@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish-tauri:
+  publish-server:
     permissions:
       contents: write
     strategy:
@@ -30,5 +30,5 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release ${{ matrix.args }}
 
