@@ -39,8 +39,13 @@ jobs:
       - name: Build
         run: cargo build --release ${{ matrix.args }}
 
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/release/iceserver \
+             target/${{ matrix.target }}/release/iceserver-v${{ steps.version.outputs.version }}-${{ matrix.target }}
+      
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: iceserver-v${{ steps.version.outputs.version }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/iceserver
+          path: target/${{ matrix.target }}/release/iceserver-v${{ steps.version.outputs.version }}-${{ matrix.target }}
