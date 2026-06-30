@@ -25,11 +25,7 @@ jobs:
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
-        with:
-          # This matches tauri's default project layout. Change this if you have a different layout.
-          workspaces: './src-tauri -> target'
 
       - name: Cargo build
-      
         run: cargo build -r
 
