@@ -16,13 +16,6 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: lts/*
-          cache: 'npm' # Set this to npm, yarn or pnpm.
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -36,7 +29,7 @@ jobs:
           # This matches tauri's default project layout. Change this if you have a different layout.
           workspaces: './src-tauri -> target'
 
-      - name: Cargo build step
+      - name: Cargo build
       
         run: cargo build -r
 
