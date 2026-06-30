@@ -1,4 +1,4 @@
-name: 'publish'
+name: publish
 
 on:
   workflow_dispatch:
@@ -7,28 +7,40 @@ jobs:
   publish-server:
     permissions:
       contents: write
+
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Intel based macs.
-            args: '--target x86_64-apple-darwin'
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            target: x86_64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
-    steps:
 
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: install Rust stable
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: x86_64-apple-darwin
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Get package version
+        id: version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build
         run: cargo build --release ${{ matrix.args }}
 
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: iceserver-v${{ steps.version.outputs.version }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/iceserver
